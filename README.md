@@ -38,3 +38,10 @@ docker run -d --name dd-agent \
 ```bash
 poetry run ddtrace-run python langgraph_bedrock.py
 ```
+
+## Invoke the agent
+```bash
+curl -X POST http://localhost:8080/invocations \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "book me an excursion"}'
+```
