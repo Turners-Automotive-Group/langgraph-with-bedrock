@@ -7,8 +7,8 @@ but
 - Human in the loop with langgraph interrupts in branch feature/human_in_the_loop
 
 the repo is in tutorial style
-step 1: master - 101 agent
-step 2: feature/human_in_the_loop - added human in the loop interrupt resume or cancel
+- step 1: master - 101 agent
+- step 2: feature/human_in_the_loop - added human in the loop interrupt resume or cancel
 
 ## Install
 
