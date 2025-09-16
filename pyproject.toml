@@ -1,0 +1,55 @@
+[project]
+name = "langgraph_on_bedrock"
+version = "0.1.0"
+description = "Build langgraph agent on bedrock agent core"
+requires-python = ">=3.10.0,<3.13"
+dependencies = [
+    "uv",
+    "langchain[aws]",
+    "langgraph",
+    "duckduckgo-search",
+    "langchain-community",
+    "starlette",
+    "uvicorn",
+    "bedrock-agentcore",
+    "bedrock-agentcore-starter-toolkit",
+    "ddtrace",
+    "poetry-plugin-dotenv (>=3.0.1,<4.0.0)",
+]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[tool.poetry]
+name = "langgraph_on_bedrock"
+version = "0.1.0"
+description = "Build langgraph agent on bedrock agent core"
+package-mode = false
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "D401", # First line should be in imperative mood
+    "T201",
+    "UP",
+]
+lint.ignore = [
+    "UP006",
+    "UP007",
+    "UP035",
+    "D417",
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "UP"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

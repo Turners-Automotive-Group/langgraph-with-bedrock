@@ -1,0 +1,14 @@
+uv
+langchain[aws]
+langgraph
+duckduckgo-search
+langchain-community
+starlette
+uvicorn
+bedrock-agentcore
+bedrock-agentcore-starter-toolkit
+ddtrace
+
+[dev]
+mypy>=1.11.1
+ruff>=0.6.1

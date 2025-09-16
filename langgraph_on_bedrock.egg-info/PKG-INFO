@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: langgraph_on_bedrock
+Version: 0.1.0
+Summary: Build langgraph agent on bedrock agent core
+Requires-Python: >=3.11
+Requires-Dist: uv
+Requires-Dist: langchain[aws]
+Requires-Dist: langgraph
+Requires-Dist: duckduckgo-search
+Requires-Dist: langchain-community
+Requires-Dist: starlette
+Requires-Dist: uvicorn
+Requires-Dist: bedrock-agentcore
+Requires-Dist: bedrock-agentcore-starter-toolkit
+Requires-Dist: ddtrace
+Provides-Extra: dev
+Requires-Dist: mypy>=1.11.1; extra == "dev"
+Requires-Dist: ruff>=0.6.1; extra == "dev"
