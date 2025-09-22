@@ -45,7 +45,30 @@ poetry run ddtrace-run python langgraph_bedrock.py
 
 ## Invoke the agent
 ```bash
+curl -X POST http://localhost:8080/invocations \  
+  -H "Content-Type: application/json" \
+  -d '{
+        "prompt": "book me an excursion",
+        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405"
+      }'
+```
+
+## Resume after interrupt
+Confirm booking
+```bash
 curl -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "book me an excursion"}'
+  -d '{
+        "command": "confirm",             
+        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405"
+      }'
+```
+Abort booking
+```bash
+curl -X POST http://localhost:8080/invocations \  
+  -H "Content-Type: application/json" \
+  -d '{
+        "command": "cancel", 
+        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405"
+      }'
 ```
