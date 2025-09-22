@@ -4,7 +4,11 @@ uses a AWS agent core runner
 but
 - uses langgraph short term memory (checkpointer) with an AWS postgres implementation
 - uses langgraph long term memory with an AWS postgres implementation
-- Human in the loop with langgraph interrupts
+- Human in the loop with langgraph interrupts in branch feature/human_in_the_loop
+
+the repo is in tutorial style
+- step 1: master - 101 agent
+- step 2: feature/human_in_the_loop - added human in the loop interrupt resume or cancel
 
 ## Install
 
