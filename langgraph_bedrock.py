@@ -1,17 +1,26 @@
 import logging
+
+from langchain_core.runnables import RunnableConfig
+
+from agent_memory import get_memory, update_memory
+from agent_state import State
+from prompts import agent_system_prompt_hitl_memory, HITL_MEMORY_TOOLS_PROMPT, MEMORY_UPDATE_INSTRUCTIONS_REINFORCEMENT
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 from typing import Literal
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langchain_aws import ChatBedrock
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.store.memory import InMemoryStore
 from langgraph.constants import END, START
-from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.graph import StateGraph
+from langgraph.prebuilt import ToolNode
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from pydantic import BaseModel, Field
 from langgraph.types import interrupt, Command
+from langgraph.store.base import BaseStore
 
 log = logging.getLogger(__name__)
 
@@ -30,9 +39,9 @@ def available_excursions() -> list[Excursion]:
         str: A list of available excursions.
     """
     return [
-        Excursion(name="Sailing", ideal_in_weather=["windy"]),
+        Excursion(name="Sailing", ideal_in_weather=["windy", "sunny"]),
         Excursion(name="Diving", ideal_in_weather=["sunny"]),
-        Excursion(name="Dota", ideal_in_weather=["rainy"]),
+        Excursion(name="Dota", ideal_in_weather=["rainy", "windy", "sunny"]),
     ]
 
 
@@ -71,23 +80,36 @@ def create_agent():
     tools = [available_excursions, weather, book_excursion, Done]
     llm_with_tools = llm.bind_tools(tools)
 
-    system_message = """
-    You are a excursion booking assistant. You can help customers find and book excursions according the the weather and the customers preferences.
-    1. Use the provided tools to find and book excursions.
-    2. IMPORTANT --- always call one tool at a time until the task is complete: 
-    3. once the task is finished, use the Done tool to indicate that the task is complete
 
-    """
+    def load_user(state: State, config: RunnableConfig):
+        user_id = config.get("configurable", {}).get("user_id")
+        return {
+            'user_id': user_id
+        }
 
-    def chatbot(state: MessagesState):
-        messages = state["messages"]
-        if not messages or not isinstance(messages[0], SystemMessage):
-            messages = [SystemMessage(content=system_message)] + messages
+    def chatbot(state: State, store: BaseStore):
+        """LLM decides whether to call a tool or not"""
 
-        response = llm_with_tools.invoke(messages)
-        return {"messages": [response]}
+        # Search for existing cal_preferences memory
+        special_instructions = get_memory(store, (state['user_id'], "special_instructions"), "No Special Instructions yet")
+        background = get_memory(store, (state['user_id'], "background"), "No Background yet")
 
-    def interrupt_handler(state: MessagesState) -> Command[Literal["tools", "__end__"]]:
+        return {
+            "messages": [
+                llm_with_tools.invoke(
+                    [
+                        {"role": "system",
+                         "content": agent_system_prompt_hitl_memory.format(tools_prompt=HITL_MEMORY_TOOLS_PROMPT,
+                                                                           background=background,
+                                                                           special_instructions=special_instructions,
+                                                                           )}
+                    ]
+                    + state["messages"]
+                )
+            ]
+        }
+
+    def interrupt_handler(state: State) -> Command[Literal["tools", "chatbot", "__end__"]]:
         # Store messages
         update = {
             "messages": [],
@@ -107,7 +129,7 @@ def create_agent():
             if tool_call["name"] == book_excursion.name:
                 config = {
                     "message": "Confirm booking this excursion.",
-                    "options": ["confirm", "cancel"]
+                    "options": ["confirm", "cancel", "feedback"]
                 }
             else:
                 raise ValueError(f"Invalid tool call: {tool_call['name']}")
@@ -128,17 +150,33 @@ def create_agent():
             if response["option"] == "confirm":
                 goto = "tools"
                 continue
-
             elif response["option"] == "cancel":
                 # Go to END
                 goto = END
                 continue
+            elif response["option"] == "feedback":
+                goto = "chatbot"
+
+                user_feedback = response["args"]["user_feedback"]
+                feedback_result = {"role": "tool",
+                       "content": f"User gave feedback, which can we incorporate into the meeting request. Feedback: {user_feedback}",
+                       "tool_call_id": tool_call["id"]}
+                update["messages"].append(feedback_result)
+                update_memory(store, (state['user_id'], "special_instructions"),
+                              state["messages"] +
+                              [
+                                  feedback_result,
+                                  {
+                                        "role": "user",
+                                        "content": f"User gave feedback, which we can use to update the response preferences. Follow all instructions above, and remember: {MEMORY_UPDATE_INSTRUCTIONS_REINFORCEMENT}."
+                                  }
+                              ])
 
         # Update the state
         return Command(goto=goto, update=update)
 
     # Conditional edge function
-    def should_continue(state: MessagesState) -> Literal["interrupt_handler", "end"]:
+    def should_continue(state: State) -> Literal["interrupt_handler", "end"]:
         """Route to tool handler, or end if Done tool called"""
         messages = state["messages"]
         last_message = messages[-1]
@@ -152,15 +190,17 @@ def create_agent():
         return "end"
 
     # Create the graph
-    graph_builder = StateGraph(MessagesState)
+    graph_builder = StateGraph(State)
 
     # Add nodes
+    graph_builder.add_node("load_user", load_user)
     graph_builder.add_node("chatbot", chatbot)
     graph_builder.add_node("interrupt_handler", interrupt_handler)
     graph_builder.add_node("tools", ToolNode(tools))
 
     # Add edges
-    graph_builder.add_edge(START, "chatbot")
+    graph_builder.add_edge(START, "load_user")
+    graph_builder.add_edge("load_user", "chatbot")
     graph_builder.add_conditional_edges(
         "chatbot",
         should_continue,
@@ -173,8 +213,9 @@ def create_agent():
     graph_builder.add_edge("tools", "chatbot")
 
     checkpointer = MemorySaver()
+    store = InMemoryStore()
 
-    return graph_builder.compile(checkpointer=checkpointer)
+    return graph_builder.compile(checkpointer=checkpointer, store=store)
 
 # Initialize Agent
 agent = create_agent()
@@ -185,16 +226,23 @@ def langgraph_bedrock(payload):
     Invoke the agent with a payload
     """
     thread_id = payload.get("thread_id")
+    user_id = payload.get("user_id")
 
     user_input = payload.get("prompt")
     user_command = payload.get("command")
+    user_feedback = payload.get("feedback")
 
     if user_command:
+        args = {}
+        if user_feedback:
+            args['user_feedback'] = user_feedback
+
         response = agent.invoke(
             Command(
-                resume=[{"option": user_command, "args": {}}]),
+                resume=[{"option": user_command, "args": args}]),
                 config={
-                    "thread_id": thread_id
+                    "thread_id": thread_id,
+                    "user_id": user_id,
                 }
         )
     else:
@@ -203,7 +251,8 @@ def langgraph_bedrock(payload):
                 "messages": [HumanMessage(content=user_input)],
             },
             config={
-                "thread_id": thread_id
+                "thread_id": thread_id,
+                "user_id": user_id,
             }
         )
 
