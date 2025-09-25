@@ -45,11 +45,12 @@ poetry run ddtrace-run python langgraph_bedrock.py
 
 ## Invoke the agent
 ```bash
-curl -X POST http://localhost:8080/invocations \  
+curl -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
   -d '{
         "prompt": "book me an excursion",
-        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405"
+        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405",
+        "user_id": "darthShana"
       }'
 ```
 
@@ -59,16 +60,29 @@ Confirm booking
 curl -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
   -d '{
-        "command": "confirm",             
-        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405"
+        "command": "confirm",
+        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405",
+        "user_id": "darthShana"
       }'
 ```
 Abort booking
 ```bash
-curl -X POST http://localhost:8080/invocations \  
+curl -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
   -d '{
-        "command": "cancel", 
-        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405"
+        "command": "cancel",
+        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405",
+        "user_id": "darthShana"
+      }'
+```
+Feedback to booking Agent
+```bash
+curl -X POST http://localhost:8080/invocations \
+  -H "Content-Type: application/json" \
+  -d '{
+        "command": "feedback",
+        "feedback": "i have a cold and i dont want to go diving",
+        "thread_id": "fc6faede-87f7-4e91-a172-eacd7230d405",
+        "user_id": "darthShana"
       }'
 ```
