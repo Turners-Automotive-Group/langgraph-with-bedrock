@@ -1,9 +1,11 @@
 import logging
+import os
 
 from langchain_core.runnables import RunnableConfig
 
 from agent_memory import get_memory, update_memory
 from agent_state import State
+from db_utils import table_exists
 from prompts import agent_system_prompt_hitl_memory, HITL_MEMORY_TOOLS_PROMPT, MEMORY_UPDATE_INSTRUCTIONS_REINFORCEMENT
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -12,8 +14,9 @@ from typing import Literal
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langchain_aws import ChatBedrock
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.store.memory import InMemoryStore
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.postgres import PostgresStore
+
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
@@ -29,6 +32,35 @@ app = BedrockAgentCoreApp()
 class Excursion(BaseModel):
     name: str = Field(description="The name of the excursion")
     ideal_in_weather: list[str] = Field(description="List to weather conditions ideal for this excursion")
+
+DB_URI = f"postgresql://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:5432/{os.getenv('DB_NAME')}"
+
+# Check if tables exist before running setup
+checkpoints_exist = table_exists(DB_URI, "checkpoints")
+store_exists = table_exists(DB_URI, "store")
+
+# Create direct connection objects (not context managers)
+from psycopg_pool import ConnectionPool
+
+# Setup function for initializing tables
+def setup_tables_if_needed():
+    if not store_exists:
+        log.info("Store table does not exist, running store.setup()")
+        with PostgresStore.from_conn_string(DB_URI) as store_temp:
+            store_temp.setup()
+
+    if not checkpoints_exist:
+        log.info("Checkpoints table does not exist, running checkpointer.setup()")
+        with PostgresSaver.from_conn_string(DB_URI) as checkpointer_temp:
+            checkpointer_temp.setup()
+
+# Run table setup
+setup_tables_if_needed()
+
+# Create persistent connections by directly instantiating with connection pool
+conn_pool = ConnectionPool(DB_URI, min_size=1, max_size=10)
+store = PostgresStore(conn=conn_pool)
+checkpointer = PostgresSaver(conn=conn_pool)
 
 @tool
 def available_excursions() -> list[Excursion]:
@@ -90,9 +122,12 @@ def create_agent():
     def chatbot(state: State, store: BaseStore):
         """LLM decides whether to call a tool or not"""
 
+        log.info("in here chatbot")
         # Search for existing cal_preferences memory
         special_instructions = get_memory(store, (state['user_id'], "special_instructions"), "No Special Instructions yet")
+        log.info(f"special_instructions: {special_instructions}")
         background = get_memory(store, (state['user_id'], "background"), "No Background yet")
+        log.info(f"background: {background}")
 
         return {
             "messages": [
@@ -164,13 +199,8 @@ def create_agent():
                 update["messages"].append(feedback_result)
                 update_memory(store, (state['user_id'], "special_instructions"),
                               state["messages"] +
-                              [
-                                  feedback_result,
-                                  {
-                                        "role": "user",
-                                        "content": f"User gave feedback, which we can use to update the response preferences. Follow all instructions above, and remember: {MEMORY_UPDATE_INSTRUCTIONS_REINFORCEMENT}."
-                                  }
-                              ])
+                              [feedback_result]
+                              )
 
         # Update the state
         return Command(goto=goto, update=update)
@@ -212,8 +242,6 @@ def create_agent():
     )
     graph_builder.add_edge("tools", "chatbot")
 
-    checkpointer = MemorySaver()
-    store = InMemoryStore()
 
     return graph_builder.compile(checkpointer=checkpointer, store=store)
 
@@ -261,7 +289,8 @@ def langgraph_bedrock(payload):
     if "__interrupt__" in response:
         return response["__interrupt__"]
 
-    return response["messages"][-1].content
+    final_content = response["messages"][-1].content
+    return final_content
 
 if __name__ == "__main__":
     app.run()
