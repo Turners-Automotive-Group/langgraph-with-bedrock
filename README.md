@@ -7,9 +7,10 @@ but
 - Human in the loop with langgraph interrupts in branch feature/human_in_the_loop
 
 the repo is in tutorial style
-- step 1: master - 101 agent
+- step 1: initial - 101 agent
 - step 2: feature/human_in_the_loop - added human in the loop interrupt resume or cancel
-
+  step 3: feature/long_term_memory - added long term memory
+- step 4: feature/realy_long_term_memory / master use postgres for store checkpoints and memory store
 ## Install
 
 ```bash
@@ -18,24 +19,9 @@ poetry install
 ```
 
 ## Observability with datadog
-
+bring up datadog agent and postgres for stores
 ```bash
-docker run -d --name dd-agent \                   
-  -e DD_API_KEY=DD_API_KEY \
-  -e DD_SITE="ap2.datadoghq.com" \
-  -e DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true \
-  -e DD_APM_ENABLED=true \
-  -e DD_APM_NON_LOCAL_TRAFFIC=true \
-  -e DD_APM_RECEIVER_SOCKET=/var/run/datadog/apm.socket \
-  -e DD_DOGSTATSD_SOCKET=/var/run/datadog/dsd.socket \
-  -v /var/run/datadog:/var/run/datadog \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -v /proc/:/host/proc/:ro \
-  -v /sys/fs/cgroup/:/host/sys/fs/cgroup:ro \
-  -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
-  -p 8126:8126 \
-  -p 8125:8125/udp \
-  gcr.io/datadoghq/agent:7
+docker-compose up
 ```
 
 ## Run
