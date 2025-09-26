@@ -1,3 +1,5 @@
+import os
+
 from langchain.chat_models import init_chat_model
 from langchain_aws import ChatBedrock
 from pydantic import BaseModel, Field
@@ -29,15 +31,38 @@ def get_memory(store, namespace, default_content=None):
     Returns:
         str: The content of the memory profile, either from existing memory or the default
     """
-    # Search for existing memory with namespace and key
-    special_instructions = store.get(namespace, "special_instructions")
+    try:
+        print(f"Getting memory for namespace: {namespace}")
 
-    # If memory exists, return its content (the value)
-    if special_instructions:
-        return special_instructions.value
+        # Let's try to query the raw data first to see what's actually stored
+        import psycopg
+        DB_URI = f"postgresql://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:5432/{os.getenv('DB_NAME')}"
+        with psycopg.connect(DB_URI) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT value FROM store WHERE prefix = %s AND key = %s",
+                           (f"{namespace[0]}.{namespace[1]}", "special_instructions"))
+                raw_row = cur.fetchone()
 
-    # Return the default content
-    return default_content
+
+        # Search for existing memory with namespace and key
+        special_instructions = store.get(namespace, "special_instructions")
+
+        # If memory exists, return its content (the value)
+        if special_instructions:
+            # Handle both old format (direct string) and new format (dict with 'value' key)
+            if isinstance(special_instructions.value, dict) and 'value' in special_instructions.value:
+                return special_instructions.value['value']
+            else:
+                return special_instructions.value
+
+        # Return the default content
+        print(f"Returning default: {default_content}")
+        return default_content
+    except Exception as e:
+        print(f"Error in get_memory: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 def update_memory(store, namespace, messages):
     """Update memory profile in the store.
@@ -55,12 +80,19 @@ def update_memory(store, namespace, messages):
     else:
         instructions_value = 'No special instructions'
     # Update the memory
-    result: UserPreferences | dict = memory_llm.invoke(
-    [
-        {"role": "system",
-         "content": MEMORY_UPDATE_INSTRUCTIONS.format(current_profile=instructions_value, namespace=namespace)},
-    ] + messages
-    )
+    try:
+        result: UserPreferences | dict = memory_llm.invoke(
+        [
+            {"role": "system",
+             "content": MEMORY_UPDATE_INSTRUCTIONS.format(current_profile=instructions_value, namespace=namespace)},
+        ] + messages
+        )
+    except Exception as e:
+        print(f"Error invoking memory_llm: {e}")
+        print(f"Messages: {messages}")
+        raise
 
     # Save the updated memory to the store
-    store.put(namespace, "special_instructions", result.special_instructions)
+    # The PostgreSQL store expects JSON values, so we need to store the string as JSON
+    print(f"Storing memory: {result.special_instructions}")
+    store.put(namespace, "special_instructions", {"value": result.special_instructions})
