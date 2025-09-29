@@ -119,10 +119,9 @@ def create_agent():
             'user_id': user_id
         }
 
-    def chatbot(state: State, store: BaseStore):
+    def assistant(state: State, store: BaseStore):
         """LLM decides whether to call a tool or not"""
 
-        log.info("in here chatbot")
         # Search for existing cal_preferences memory
         special_instructions = get_memory(store, (state['user_id'], "special_instructions"), "No Special Instructions yet")
         log.info(f"special_instructions: {special_instructions}")
@@ -144,7 +143,7 @@ def create_agent():
             ]
         }
 
-    def interrupt_handler(state: State) -> Command[Literal["tools", "chatbot", "__end__"]]:
+    def interrupt_handler(state: State) -> Command[Literal["tools", "assistant", "__end__"]]:
         # Store messages
         update = {
             "messages": [],
@@ -190,7 +189,7 @@ def create_agent():
                 goto = END
                 continue
             elif response["option"] == "feedback":
-                goto = "chatbot"
+                goto = "assistant"
 
                 user_feedback = response["args"]["user_feedback"]
                 feedback_result = {"role": "tool",
@@ -224,15 +223,15 @@ def create_agent():
 
     # Add nodes
     graph_builder.add_node("load_user", load_user)
-    graph_builder.add_node("chatbot", chatbot)
+    graph_builder.add_node("assistant", assistant)
     graph_builder.add_node("interrupt_handler", interrupt_handler)
     graph_builder.add_node("tools", ToolNode(tools))
 
     # Add edges
     graph_builder.add_edge(START, "load_user")
-    graph_builder.add_edge("load_user", "chatbot")
+    graph_builder.add_edge("load_user", "assistant")
     graph_builder.add_conditional_edges(
-        "chatbot",
+        "assistant",
         should_continue,
         {
             "interrupt_handler": "interrupt_handler",
@@ -240,7 +239,7 @@ def create_agent():
 
         }
     )
-    graph_builder.add_edge("tools", "chatbot")
+    graph_builder.add_edge("tools", "assistant")
 
 
     return graph_builder.compile(checkpointer=checkpointer, store=store)
