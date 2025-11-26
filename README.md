@@ -78,10 +78,28 @@ curl -X POST http://localhost:8080/invocations \
 ## Walkthrough
 
 ### Agent 101
-An agentic application is one with a llm powered controller, that dictates control flow. As apposed to a having this 
-dictated by a static business process flow. Lets call llm powered controller the assistant. 
-Here our assistant has a set of tools it can call. Its has a system prompt: "book excursions for user", 
-it gets given a input "book me an excursion", it then uses these available tools to perform the "job to be done" for the user 
+An agentic application is one with a llm powered controller, that dictates control flow. As apposed to a having this
+dictated by a static business process flow. Lets call llm powered controller the assistant.
+Here our assistant has a set of tools it can call. Its has a system prompt: "book excursions for user",
+it gets given a input "book me an excursion", it then uses these available tools to perform the "job to be done" for the user
+
+#### Traditional Process Flow
+In a traditional application, the control flow would be rigid and predefined:
+
+```mermaid
+graph TD
+    A[Get User Info] --> B[Get Current Weather]
+    B --> C[Get Available Excursions]
+    C --> D{User Confirmation?}
+    D -->|Yes| E[Book Excursion]
+    D -->|No| F[Exit]
+    E --> G[END]
+    F --> G
+```
+
+This works fine for predictable scenarios, but what if the user wants to skip checking weather? Or compare multiple excursions?
+The traditional flow is inflexible and requires code changes for new paths. An agent-based approach lets the LLM decide
+which tools to use and in what order, based on the user's actual needs.
 
 #### Tools
 Lets start by defining some tools. I ve got 3 fake tools
